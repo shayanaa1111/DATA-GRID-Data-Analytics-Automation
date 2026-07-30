@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Datagrid — AI Data Analytics Platform
 
 Upload any dataset — or connect a database, or drop in a ZIP of several
@@ -244,3 +245,6 @@ analytics-platform/
   summing/averaging/plotting them is meaningless, so `utils/charts.py`
   filters them out by name pattern and (for integer columns only) near-100%
   cardinality.
+=======
+
+>>>>>>> 30091895bf3d7b704de5ddd0ded43438b728998b
