@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Choose Dataset | Datagrid{% endblock %}
+{% block content %}
+
+<div class="upload-hero" style="max-width:640px;">
+  <h1>Choose a file to analyze</h1>
+  <p class="lead">Your archive contains {{ files|length }} supported file(s). Pick one to clean, profile, and dashboard. You can come back and analyze another file from the same archive afterward.</p>
+
+  <div class="recent-list" style="text-align:left;">
+    {% for f in files %}
+    <div class="recent-item" style="cursor:pointer;" data-path="{{ f.relative_path }}">
+      <span>{{ f.name }}</span>
+      <span class="badge badge-neutral">{{ f.size_kb }} KB</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <p class="upload-error" id="chooseError"></p>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const BATCH_ID = "{{ batch_id }}";
+document.querySelectorAll('[data-path]').forEach(el => {
+  el.addEventListener('click', async () => {
+    const errorEl = document.getElementById('chooseError');
+    errorEl.style.display = 'none';
+    el.style.opacity = 0.5;
+    try {
+      const res = await fetch(`/api/upload-from-batch/${BATCH_ID}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ relative_path: el.dataset.path }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not load that file.');
+      window.location.href = data.redirect;
+    } catch (e) {
+      errorEl.textContent = e.message;
+      errorEl.style.display = 'block';
+      el.style.opacity = 1;
+    }
+  });
+});
+</script>
+{% endblock %}

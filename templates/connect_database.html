@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Connect Database | Datagrid{% endblock %}
+{% block content %}
+
+<div class="topbar">
+  <div>
+    <h1>Connect a database</h1>
+    <p class="subtitle">Pull a table in from PostgreSQL, MySQL, or SQLite and analyze it like any upload.</p>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Connection</div>
+
+    <div style="display:flex; flex-direction:column; gap:12px; max-width:420px;">
+      <label>
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Database type</div>
+        <select id="dialect" class="chat-input-row-select" style="width:100%; background:var(--surface-alt); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:9px 10px;">
+          {% for d in dialects %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+        </select>
+      </label>
+
+      <div id="hostFields">
+        <label style="display:block; margin-bottom:10px;">
+          <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Host</div>
+          <input id="host" type="text" placeholder="localhost" style="width:100%; background:var(--surface-alt); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:9px 10px;">
+        </label>
+        <label style="display:block; margin-bottom:10px;">
+          <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Port</div>
+          <input id="port" type="text" placeholder="5432" style="width:100%; background:var(--surface-alt); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:9px 10px;">
+        </label>
+        <label style="display:block; margin-bottom:10px;">
+          <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Username</div>
+          <input id="username" type="text" style="width:100%; background:var(--surface-alt); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:9px 10px;">
+        </label>
+        <label style="display:block; margin-bottom:10px;">
+          <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Password</div>
+          <input id="password" type="password" style="width:100%; background:var(--surface-alt); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:9px 10px;">
+        </label>
+      </div>
+
+      <label>
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;" id="dbLabel">Database name</div>
+        <input id="database" type="text" placeholder="my_database" style="width:100%; background:var(--surface-alt); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:9px 10px;">
+      </label>
+
+      <button class="btn btn-primary" id="connectBtn" style="margin-top:6px;">Connect & list tables</button>
+      <p id="connectError" style="color:var(--danger); font-size:13px; display:none; margin:0;"></p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Tables</div>
+    <div id="tablesList"><p class="empty-note">Connect to a database to see its tables here.</p></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <p style="margin:0; font-size:12.5px;">
+    <strong>Note:</strong> SQL Server and Oracle need extra drivers (pyodbc / cx_Oracle plus native client
+    libraries) that aren't bundled by default — see the README for how to add them. Your credentials are
+    used only for this one connection and are never written to disk.
+  </p>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const dialectSelect = document.getElementById('dialect');
+const hostFields = document.getElementById('hostFields');
+const dbLabel = document.getElementById('dbLabel');
+const connectBtn = document.getElementById('connectBtn');
+const connectError = document.getElementById('connectError');
+const tablesList = document.getElementById('tablesList');
+
+function updateFieldsForDialect() {
+  const isSqlite = dialectSelect.value === 'sqlite';
+  hostFields.style.display = isSqlite ? 'none' : 'block';
+  dbLabel.textContent = isSqlite ? 'Path to .db / .sqlite file (on the server)' : 'Database name';
+}
+dialectSelect.addEventListener('change', updateFieldsForDialect);
+updateFieldsForDialect();
+
+connectBtn.addEventListener('click', async () => {
+  connectError.style.display = 'none';
+  connectBtn.disabled = true;
+  connectBtn.textContent = 'Connecting...';
+  tablesList.innerHTML = '<p class="empty-note">Connecting...</p>';
+
+  try {
+    const res = await fetch('/api/db/list-tables', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dialect: dialectSelect.value,
+        host: document.getElementById('host').value,
+        port: document.getElementById('port').value,
+        database: document.getElementById('database').value,
+        username: document.getElementById('username').value,
+        password: document.getElementById('password').value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Connection failed.');
+
+    if (!data.tables.length) {
+      tablesList.innerHTML = '<p class="empty-note">Connected, but no tables were found.</p>';
+    } else {
+      tablesList.innerHTML = data.tables.map(t =>
+        `<div class="recent-item" style="cursor:pointer;" data-table="${t}"><span>${t}</span><span class="badge badge-good">Load</span></div>`
+      ).join('');
+      tablesList.querySelectorAll('[data-table]').forEach(el => {
+        el.addEventListener('click', () => loadTable(el.dataset.table, el));
+      });
+    }
+  } catch (e) {
+    connectError.textContent = e.message;
+    connectError.style.display = 'block';
+    tablesList.innerHTML = '<p class="empty-note">Connect to a database to see its tables here.</p>';
+  }
+  connectBtn.disabled = false;
+  connectBtn.textContent = 'Connect & list tables';
+});
+
+async function loadTable(tableName, el) {
+  el.style.opacity = 0.5;
+  try {
+    const res = await fetch('/api/db/load-table', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ table_name: tableName }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not load table.');
+    window.location.href = data.redirect;
+  } catch (e) {
+    connectError.textContent = e.message;
+    connectError.style.display = 'block';
+    el.style.opacity = 1;
+  }
+}
+</script>
+{% endblock %}

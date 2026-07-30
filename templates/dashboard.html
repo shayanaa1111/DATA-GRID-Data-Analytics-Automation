@@ -1,0 +1,512 @@
+{% extends "base.html" %}
+{% block title %}{{ filename }} | Datagrid{% endblock %}
+{% block content %}
+
+<div class="topbar">
+  <div>
+    <h1>{{ filename }}</h1>
+    <p class="subtitle">{{ profile.shape.rows }} rows &middot; {{ profile.shape.columns }} columns &middot; {{ profile.memory_usage_mb }} MB</p>
+  </div>
+  <div style="display:flex; gap:10px; align-items:center;">
+    <div class="topbar-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="dashboardSearch" placeholder="Search columns or data...">
+    </div>
+    <button class="chart-icon-btn pin-btn {{ 'active' if pinned else '' }}" id="pinToggleBtn" title="Pin this dataset" style="width:36px; height:36px; border:1px solid var(--border);">
+      <svg viewBox="0 0 24 24" fill="{{ 'currentColor' if pinned else 'none' }}" stroke="currentColor" stroke-width="2"><path d="M12 2 9 9l-7 1 5 5-1 7 6-4 6 4-1-7 5-5-7-1z"/></svg>
+    </button>
+    <a class="btn btn-ghost" href="/api/download/{{ dataset_id }}/raw">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M12 4 7 9M12 4l5 5" transform="rotate(180 12 12)"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+      Raw CSV
+    </a>
+    <a class="btn btn-ghost" href="/api/export/excel/{{ dataset_id }}">Excel Dashboard</a>
+    <a class="btn btn-primary" href="/api/download/{{ dataset_id }}/clean">Clean CSV</a>
+  </div>
+</div>
+
+<div class="tabs" id="tabs">
+  <div class="tab" data-tab="overview">Overview</div>
+  <div class="tab" data-tab="profiling">Data Profiling</div>
+  <div class="tab" data-tab="cleaning">Data Cleaning</div>
+  <div class="tab" data-tab="eda">Exploratory Analysis</div>
+  <div class="tab" data-tab="sql">SQL Analytics</div>
+  <div class="tab" data-tab="insights">Business Insights</div>
+  <div class="tab" data-tab="chat">AI Chat</div>
+  <div class="tab" data-tab="reports">Reports & Export</div>
+  <div class="tab" data-tab="data">Data Preview</div>
+</div>
+
+<!-- OVERVIEW -->
+<div class="tab-panel" id="panel-overview">
+  <div class="kpi-grid">
+    {% for kpi in kpi_cards %}
+    <div class="kpi-card">
+      <div class="kpi-label">{{ kpi.label }}</div>
+      <div class="kpi-value">{{ "{:,.2f}".format(kpi.value) if kpi.format == 'number' else "{:,}".format(kpi.value) }}</div>
+      {% if kpi.growth_pct is not none %}
+      <div class="kpi-trend-row {{ kpi.direction }}">
+        {% if kpi.direction == 'up' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 17l6-6 4 4 6-8"/><path d="M14 7h6v6"/></svg>
+        {% elif kpi.direction == 'down' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 7l6 6 4-4 6 8"/><path d="M14 17h6v-6"/></svg>
+        {% else %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 12h16"/></svg>
+        {% endif %}
+        <span>{{ "%+.1f"|format(kpi.growth_pct) }}%</span>
+      </div>
+      {% endif %}
+      {% if kpi.trend and kpi.trend|length > 1 %}
+      <svg class="kpi-sparkline" viewBox="0 0 100 24" preserveAspectRatio="none" width="100%" height="24" data-sparkline="{{ kpi.trend|tojson }}"></svg>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Data Quality Score</div>
+      <div class="quality-ring-wrap">
+        <div class="quality-score-num" style="color: {% if profile.quality_score >= 85 %}var(--accent){% elif profile.quality_score >= 60 %}var(--warn){% else %}var(--danger){% endif %};">
+          {{ profile.quality_score }}<span style="font-size:15px; color:var(--text-faint);">/100</span>
+        </div>
+        <div>
+          <p style="margin:0;">{{ profile.total_missing_pct }}% missing cells &middot; {{ profile.duplicate_rows }} duplicate rows detected before cleaning.</p>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Column Types</div>
+      <p style="margin:0;">
+        <span class="badge badge-good">{{ profile.column_types.numeric }} numeric</span>
+        &nbsp;<span class="badge badge-neutral">{{ profile.column_types.categorical }} categorical</span>
+        &nbsp;<span class="badge badge-warn">{{ profile.column_types.datetime }} datetime</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="card-title">Dataset Intelligence</div>
+    <div class="intel-row">
+      <span class="label">Detected business domain</span>
+      <span class="value">{{ dataset_intelligence.business_domain }}{% if dataset_intelligence.domain_confidence %} <span class="badge badge-neutral">{{ (dataset_intelligence.domain_confidence * 100)|round|int }}% confidence</span>{% endif %}</span>
+    </div>
+    <div class="intel-row">
+      <span class="label">Detected KPI columns</span>
+      <span class="value">{{ dataset_intelligence.kpi_candidates|join(', ') if dataset_intelligence.kpi_candidates else 'None detected' }}</span>
+    </div>
+    <div class="intel-row">
+      <span class="label">Possible key columns</span>
+      <span class="value">{{ dataset_intelligence.key_candidates|join(', ') if dataset_intelligence.key_candidates else 'None detected' }}</span>
+    </div>
+    <div class="intel-row">
+      <span class="label">Statistical anomalies (IQR method)</span>
+      <span class="value">{{ dataset_intelligence.anomaly_summary.total_anomalies }} value(s) flagged across {{ dataset_intelligence.anomaly_summary.by_column|length }} column(s)</span>
+    </div>
+  </div>
+</div>
+
+<!-- PROFILING -->
+<div class="tab-panel" id="panel-profiling">
+  <div class="card">
+    <div class="card-title">Column Profile</div>
+    <div class="table-scroll">
+      <table class="data-table" id="columnProfileTable">
+        <thead><tr><th>Column</th><th>Type</th><th>Missing</th><th>Unique</th><th>Cardinality</th></tr></thead>
+        <tbody>
+        {% for c in profile.columns %}
+          <tr>
+            <td>{{ c.name }}</td>
+            <td>{{ c.dtype }}</td>
+            <td>{{ c.missing_count }} ({{ c.missing_pct }}%)</td>
+            <td>{{ c.unique_count }}</td>
+            <td>{{ c.cardinality_pct }}%</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if profile.numeric_summary %}
+  <div class="card" style="margin-top:16px;">
+    <div class="card-title">Numeric Summary</div>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>Column</th><th>Mean</th><th>Median</th><th>Std</th><th>Min</th><th>P10</th><th>Q1</th><th>Q3</th><th>P90</th><th>Max</th><th>Skew</th><th>Kurtosis</th><th>CV</th></tr></thead>
+        <tbody>
+        {% for col, s in profile.numeric_summary.items() %}
+          <tr>
+            <td>{{ col }}</td><td>{{ s.mean }}</td><td>{{ s.median }}</td><td>{{ s.std }}</td>
+            <td>{{ s.min }}</td><td>{{ s.p10 }}</td><td>{{ s.q1 }}</td><td>{{ s.q3 }}</td><td>{{ s.p90 }}</td>
+            <td>{{ s.max }}</td><td>{{ s.skewness }}</td><td>{{ s.kurtosis }}</td><td>{{ s.coefficient_of_variation }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if profile.categorical_summary %}
+  <div class="card" style="margin-top:16px;">
+    <div class="card-title">Categorical Summary</div>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>Column</th><th>Unique</th><th>Top Values</th></tr></thead>
+        <tbody>
+        {% for col, s in profile.categorical_summary.items() %}
+          <tr>
+            <td>{{ col }}</td>
+            <td>{{ s.unique_count }}</td>
+            <td>{% for tv in s.top_values %}{{ tv.value }} ({{ tv.count }}){% if not loop.last %}, {% endif %}{% endfor %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- CLEANING -->
+<div class="tab-panel" id="panel-cleaning">
+  <div class="card">
+    <div class="card-title">Cleaning Steps Applied</div>
+    {% if cleaning_log %}
+    <ul class="log-list">
+      {% for step in cleaning_log %}
+      <li>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+        <span>{{ step }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-note">No cleaning was necessary &mdash; the dataset was already tidy.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- EDA -->
+<div class="tab-panel" id="panel-eda">
+  {% if any_chart_sampled %}
+  <div class="empty-note" style="text-align:left; padding:10px 14px; margin-bottom:12px; border:1px dashed var(--border); border-radius:var(--radius-sm);">
+    This dataset is large enough that a few point-heavy charts (box plots, violin plots, pair plot) use a representative sample for speed. KPI totals, histograms, and correlations are always computed on the full {{ "{:,}".format(profile.shape.rows) }} rows.
+  </div>
+  {% endif %}
+  {% if not charts %}
+  <div class="empty-note">Not enough structured data to auto-generate charts for this dataset.</div>
+  {% else %}
+  <div class="chip-row" id="chartCategoryChips">
+    <div class="chip active" data-category="all">All Charts</div>
+    <div class="chip" data-category="distribution">Distributions</div>
+    <div class="chip" data-category="categories">Categories</div>
+    <div class="chip" data-category="relationships">Relationships</div>
+    <div class="chip" data-category="time">Time</div>
+    <div class="chip" data-category="quality">Data Quality</div>
+  </div>
+  <div class="chart-grid" id="chartGrid">
+    {% for chart in charts %}
+    <div class="card" data-category="{{ chart.category }}">
+      <div class="chart-card-head">
+        <a class="chart-icon-btn" href="data:image/png;base64,{{ chart.image_base64 }}" download="{{ chart.id }}.png" title="Download PNG">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M12 4 7 9M12 4l5 5" transform="rotate(180 12 12)"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        </a>
+        <button class="chart-icon-btn" data-action="fullscreen" data-img="data:image/png;base64,{{ chart.image_base64 }}" data-title="{{ chart.title }}" title="Fullscreen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/></svg>
+        </button>
+      </div>
+      {% if chart.sampled %}
+      <div style="font-size:11px; color:var(--text-faint); margin-bottom:6px;">Showing {{ "{:,}".format(chart.sample_size) }} of {{ "{:,}".format(chart.total_size) }} points (sampled for performance)</div>
+      {% endif %}
+      <img src="data:image/png;base64,{{ chart.image_base64 }}" alt="{{ chart.title }}" style="width:100%; height:auto; border-radius:8px; display:block;">
+      <div class="chart-explain" id="explain-{{ chart.id }}">
+        {% if ai_enabled %}<button class="chat-suggest-btn" data-chart="{{ chart.title }}" data-target="{{ chart.id }}">✨ AI explain this chart</button>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+
+<!-- SQL ANALYTICS -->
+<div class="tab-panel" id="panel-sql">
+  {% if not sql_ready %}
+  <div class="card"><p class="empty-note">SQL database could not be built for this dataset.</p></div>
+  {% else %}
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-title">
+      Table Schema
+      <span class="badge badge-neutral mono">SELECT * FROM dataset</span>
+    </div>
+    <div id="sqlSchema" class="mono" style="font-size:12.5px; color:var(--text-muted); display:flex; flex-wrap:wrap; gap:8px;"></div>
+  </div>
+
+  {% if ai_enabled %}
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-title">Ask in Plain English</div>
+    <div class="chat-input-row" style="margin-top:0;">
+      <input type="text" id="nlQuestion" placeholder="e.g. What are the top 5 regions by total revenue?">
+      <button class="btn btn-primary" id="nlToSqlBtn">Generate SQL</button>
+    </div>
+  </div>
+  {% endif %}
+
+  <div style="display:grid; grid-template-columns: 1fr 300px; gap:16px; align-items:start;">
+    <div class="card">
+      <div class="card-title">
+        SQL Editor
+        <div style="display:flex; gap:8px;">
+          {% if ai_enabled %}
+          <button class="btn btn-ghost" id="explainSqlBtn">Explain</button>
+          <button class="btn btn-ghost" id="optimizeSqlBtn">Optimize</button>
+          {% endif %}
+          <button class="btn btn-ghost" id="saveSqlBtn">Save</button>
+          <button class="btn btn-primary" id="runSqlBtn">Run Query</button>
+        </div>
+      </div>
+      <textarea id="sqlEditor" class="mono" spellcheck="false"
+        style="width:100%; min-height:120px; background:var(--surface-alt); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:12px; font-size:13px; resize:vertical;"
+        placeholder="SELECT * FROM dataset LIMIT 20;">SELECT * FROM dataset LIMIT 20;</textarea>
+      <div id="sqlExplain" class="chart-explain"></div>
+      <p id="sqlError" style="color:var(--danger); font-size:13px; margin-top:10px; display:none;"></p>
+
+      <div id="sqlResultsWrap" style="margin-top:16px; display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <span id="sqlResultMeta" style="font-size:12.5px; color:var(--text-muted);"></span>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-ghost" id="sqlChartBtn">Chart Results</button>
+            <button class="btn btn-ghost" id="sqlDownloadBtn">Download CSV</button>
+          </div>
+        </div>
+        <div class="table-scroll"><table class="data-table" id="sqlResultsTable"></table></div>
+        <div id="sqlChartOutput" style="margin-top:14px;"></div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:16px;">
+      <div class="card">
+        <div class="card-title">Saved Queries</div>
+        <div id="savedQueriesList"><p class="empty-note" style="padding:8px 0;">No saved queries yet.</p></div>
+      </div>
+      <div class="card">
+        <div class="card-title">
+          Query History
+          <button class="chart-icon-btn" id="clearHistoryBtn" title="Clear history">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
+          </button>
+        </div>
+        <div id="queryHistoryList"><p class="empty-note" style="padding:8px 0;">No queries run yet.</p></div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- INSIGHTS -->
+<div class="tab-panel" id="panel-insights">
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div class="card">
+      <div class="card-title">Top Performers</div>
+      {% if business_insights.top_performers %}
+        {% for p in business_insights.top_performers %}
+        <div class="performer-row">
+          <div style="display:flex; align-items:center;">
+            <div class="performer-rank">{{ loop.index }}</div>
+            <div>
+              <div class="performer-name">{{ p.label }}</div>
+              <div class="performer-sub">{{ p.dimension }} &middot; {{ p.share_pct }}% of total {{ p.metric }}</div>
+            </div>
+          </div>
+          <div class="performer-value">{{ "{:,.2f}".format(p.value) }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="empty-note">Not enough categorical + numeric columns to rank performers.</p>
+      {% endif %}
+    </div>
+    <div class="card">
+      <div class="card-title">Bottom Performers</div>
+      {% if business_insights.bottom_performers %}
+        {% for p in business_insights.bottom_performers %}
+        <div class="performer-row">
+          <div style="display:flex; align-items:center;">
+            <div class="performer-rank">{{ loop.index }}</div>
+            <div>
+              <div class="performer-name">{{ p.label }}</div>
+              <div class="performer-sub">{{ p.dimension }} &middot; {{ p.share_pct }}% of total {{ p.metric }}</div>
+            </div>
+          </div>
+          <div class="performer-value">{{ "{:,.2f}".format(p.value) }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="empty-note">Not enough categorical + numeric columns to rank performers.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div class="card">
+      <div class="card-title">Growth Opportunities</div>
+      {% if business_insights.growth_opportunities %}
+        {% for g in business_insights.growth_opportunities %}
+        <div class="insight-item opportunity">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
+          <span><strong>{{ g.label }}</strong> ({{ g.dimension }}) &mdash; {{ g.reason }}</span>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="empty-note">No clear growth signal detected in this dataset.</p>
+      {% endif %}
+    </div>
+    <div class="card">
+      <div class="card-title">Risk Indicators</div>
+      {% if business_insights.risk_indicators %}
+        {% for r in business_insights.risk_indicators %}
+        <div class="insight-item risk">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+          <span>{{ r.message }}</span>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="empty-note">No notable risk signals detected.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      AI Executive Summary
+      <button class="btn btn-primary" id="genInsightsBtn" {{ 'disabled' if not ai_enabled }}>Generate Summary</button>
+    </div>
+    {% if not ai_enabled %}
+      <p class="empty-note">Set GROQ_API_KEY in your .env file to enable AI-generated insights.</p>
+    {% else %}
+      <div id="insightsContent"><p class="empty-note">Click "Generate Summary" for an AI-written executive summary of this dataset.</p></div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- CHAT -->
+<div class="tab-panel" id="panel-chat">
+  {% if not ai_enabled %}
+  <div class="card"><p class="empty-note">Set GROQ_API_KEY in your .env file to enable the AI chat assistant.</p></div>
+  {% else %}
+  <div class="chat-layout">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:10px;">
+        Chats
+        <button class="chart-icon-btn" id="newChatBtn" title="New chat">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+      <div id="chatSessionList"><p class="empty-note" style="padding:8px 0; font-size:12px;">No chats yet.</p></div>
+    </div>
+
+    <div class="card chat-panel">
+      <div class="card-title" id="chatSessionTitle">Ask the AI Data Analyst</div>
+      <div class="chat-suggestions">
+        <button class="chat-suggest-btn" data-q="Give me a quick summary of this dataset.">Summarize this dataset</button>
+        <button class="chat-suggest-btn" data-q="What are the most important trends or patterns here?">Key trends</button>
+        <button class="chat-suggest-btn" data-q="Are there any data quality issues I should know about?">Data quality issues</button>
+        <button class="chat-suggest-btn" data-q="What columns look most correlated and why might that be?">Correlations</button>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-msg ai">Ask me anything about this dataset &mdash; totals, trends, outliers, or what a specific column means for the business.</div>
+      </div>
+      <div id="followupChips"></div>
+      <div class="chat-input-row">
+        <input type="text" id="chatInput" placeholder="e.g. Which region has the highest total revenue?">
+        <button class="btn btn-primary" id="chatSendBtn">Send</button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- REPORTS -->
+<div class="tab-panel" id="panel-reports">
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Business Reports</div>
+      <p style="font-size:13px;">Export a shareable report. If you've generated an AI Executive Summary on the Business Insights tab, it's included automatically.</p>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
+        <a class="btn btn-ghost" style="justify-content:space-between;" href="/api/report/{{ dataset_id }}/markdown">
+          <span>Markdown Report (.md)</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M12 4 7 9M12 4l5 5" transform="rotate(180 12 12)"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        </a>
+        <a class="btn btn-ghost" style="justify-content:space-between;" href="/api/report/{{ dataset_id }}/html?download=1">
+          <span>HTML Report (.html)</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M12 4 7 9M12 4l5 5" transform="rotate(180 12 12)"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        </a>
+        <a class="btn btn-primary" style="justify-content:space-between;" href="/api/report/{{ dataset_id }}/pdf">
+          <span>PDF Report (.pdf)</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M12 4 7 9M12 4l5 5" transform="rotate(180 12 12)"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        </a>
+        <a class="btn btn-ghost" style="justify-content:space-between;" href="/api/report/{{ dataset_id }}/json">
+          <span>JSON Data Export (.json)</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M12 4 7 9M12 4l5 5" transform="rotate(180 12 12)"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        </a>
+        <a class="btn btn-ghost" href="/api/report/{{ dataset_id }}/html" target="_blank" style="text-align:center;">Preview HTML report in a new tab &rarr;</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Excel Dashboard</div>
+      <p style="font-size:13px;">A full workbook: Dashboard (KPIs + native charts), Summary, Pivot Tables, Clean Data, Raw Data, and an AI Search reference sheet.</p>
+      <a class="btn btn-primary" style="margin-top:14px; display:inline-flex;" href="/api/export/excel/{{ dataset_id }}">Download Excel Dashboard (.xlsx)</a>
+
+      <div class="card-title" style="margin-top:26px;">Raw Data Exports</div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <a class="btn btn-ghost" style="justify-content:space-between;" href="/api/download/{{ dataset_id }}/clean">
+          <span>Clean Dataset (.csv)</span>
+        </a>
+        <a class="btn btn-ghost" style="justify-content:space-between;" href="/api/download/{{ dataset_id }}/raw">
+          <span>Raw Dataset (.csv)</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DATA -->
+<div class="tab-panel" id="panel-data">
+  <div class="card">
+    <div class="card-title">
+      Data Preview <span id="dataPreviewCount" style="font-weight:400; color:var(--text-faint); font-size:12px; margin-left:6px;">({{ total_rows }} total rows)</span>
+      <div style="display:flex; gap:8px;">
+        <a class="btn btn-ghost" href="/api/download/{{ dataset_id }}/raw">Download Raw</a>
+        <a class="btn btn-primary" href="/api/download/{{ dataset_id }}/clean">Download Clean</a>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table" id="dataPreviewTable">
+        <thead><tr>{% for col in preview_columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+        <tbody>
+        {% for row in preview_rows %}
+          <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination-row">
+      <button class="btn btn-ghost" id="prevPageBtn">&larr; Prev</button>
+      <span id="pageIndicator" class="mono" style="font-size:12.5px; color:var(--text-muted);">Page 1</span>
+      <button class="btn btn-ghost" id="nextPageBtn">Next &rarr;</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script id="cachedSummaryData" type="application/json">{{ cached_summary | tojson }}</script>
+<script>
+  const DATASET_ID = "{{ dataset_id }}";
+  const AI_ENABLED = {{ 'true' if ai_enabled else 'false' }};
+  const SQL_READY = {{ 'true' if sql_ready else 'false' }};
+</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

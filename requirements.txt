@@ -1,0 +1,19 @@
+Flask==3.0.3
+Werkzeug==3.0.4
+python-dotenv==1.0.1
+pandas==2.2.3
+numpy==1.26.4
+openpyxl==3.1.5
+xlrd==2.0.1
+requests==2.32.3
+gunicorn==22.0.0
+
+# SQL Analytics + database sources
+SQLAlchemy==2.0.36
+psycopg2-binary==2.9.10
+PyMySQL==1.1.1
+
+# Reports
+reportlab==4.2.5
+matplotlib==3.9.2
+seaborn==0.13.2

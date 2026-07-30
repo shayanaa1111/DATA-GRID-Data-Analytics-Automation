@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Activity Log | Datagrid{% endblock %}
+{% block content %}
+
+<div class="topbar">
+  <div>
+    <h1>Activity Log</h1>
+    <p class="subtitle">Last {{ entries|length }} events &middot; uploads, SQL queries, and AI requests across the app.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Time (UTC)</th><th>Event</th><th>Status</th><th>Duration</th><th>Dataset</th><th>Details</th></tr></thead>
+      <tbody>
+        {% for e in entries %}
+        <tr>
+          <td>{{ e.timestamp[:19] }}</td>
+          <td>{{ e.event }}</td>
+          <td>
+            {% if e.status == 'error' %}<span class="badge badge-bad">error</span>
+            {% elif e.status == 'ok' %}<span class="badge badge-good">ok</span>
+            {% else %}<span class="badge badge-neutral">—</span>{% endif %}
+          </td>
+          <td>{{ e.duration_ms }} ms</td>
+          <td>{{ e.dataset_id or '' }}</td>
+          <td>{{ e.kind or e.filename or e.error or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if not entries %}<p class="empty-note">No activity recorded yet.</p>{% endif %}
+</div>
+
+{% endblock %}

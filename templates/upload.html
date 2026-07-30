@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Upload Dataset | Datagrid{% endblock %}
+{% block content %}
+
+<div class="upload-hero">
+  <h1>Upload your dataset</h1>
+  <p class="lead">CSV, Excel, JSON, or TSV. We'll auto-detect the format, clean it, and build your dashboard.</p>
+
+  <div class="dropzone" id="dropzone">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M12 4 7 9M12 4l5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+    <h3 style="margin-bottom:4px;">Drag & drop your file here</h3>
+    <p style="margin:0;">or click to browse &middot; max {{ max_mb }} MB &middot; .zip archives supported</p>
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.json,.tsv,.txt,.zip" hidden>
+  </div>
+
+  <div class="format-pills">
+    <span class="pill">.csv</span>
+    <span class="pill">.xlsx</span>
+    <span class="pill">.xls</span>
+    <span class="pill">.json</span>
+    <span class="pill">.tsv</span>
+    <span class="pill">.txt</span>
+    <span class="pill">.zip</span>
+  </div>
+
+  <p style="margin-top:18px; font-size:12.5px;">Pulling from a database instead? <a href="/connect-database" style="color:var(--accent); text-decoration:underline;">Connect one here</a>.</p>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <p id="progressLabel" style="margin-top:8px; font-size:13px;">Uploading...</p>
+  </div>
+
+  <p class="upload-error" id="uploadError">{{ error or '' }}</p>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const progressWrap = document.getElementById('progressWrap');
+const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
+const uploadError = document.getElementById('uploadError');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) uploadFile(fileInput.files[0]);
+});
+
+function uploadFile(file) {
+  uploadError.style.display = 'none';
+  progressWrap.style.display = 'block';
+  progressFill.style.width = '10%';
+  progressLabel.textContent = `Uploading ${file.name}...`;
+  if (window.showToast) window.showToast(`Uploading ${file.name}...`, 'info', 3000);
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/upload');
+
+  xhr.upload.addEventListener('progress', (e) => {
+    if (e.lengthComputable) {
+      const pct = Math.min(90, Math.round((e.loaded / e.total) * 90));
+      progressFill.style.width = pct + '%';
+    }
+  });
+
+  xhr.onload = () => {
+    let data;
+    try { data = JSON.parse(xhr.responseText); } catch { data = {}; }
+    if (xhr.status === 200 && data.redirect) {
+      progressFill.style.width = '100%';
+      progressLabel.textContent = 'Cleaning, profiling, and building your dashboard...';
+      if (window.showToast) window.showToast('Upload complete — building your dashboard', 'success', 2500);
+      window.location.href = data.redirect;
+    } else {
+      progressWrap.style.display = 'none';
+      uploadError.textContent = data.error || 'Upload failed. Please try again.';
+      uploadError.style.display = 'block';
+      if (window.showToast) window.showToast(data.error || 'Upload failed. Please try again.', 'error', 6000);
+    }
+  };
+  xhr.onerror = () => {
+    progressWrap.style.display = 'none';
+    uploadError.textContent = 'Network error while uploading. Please try again.';
+    uploadError.style.display = 'block';
+    if (window.showToast) window.showToast('Network error while uploading.', 'error', 6000);
+  };
+  xhr.send(formData);
+}
+</script>
+{% endblock %}

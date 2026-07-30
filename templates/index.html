@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Datagrid | AI Analytics Platform{% endblock %}
+{% block content %}
+
+<section class="hero">
+  <div class="eyebrow">Upload once. Understand everything.</div>
+  <h1>Turn any spreadsheet into a business intelligence dashboard.</h1>
+  <p class="lead">
+    Drop in a CSV, Excel, or JSON file. Datagrid automatically cleans it, profiles it,
+    charts it, and gives you an AI analyst to ask questions of &mdash; no configuration,
+    no SQL required, no machine learning involved.
+  </p>
+  <a href="/upload" class="btn btn-primary">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M12 4 7 9M12 4l5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+    Upload a dataset
+  </a>
+
+  <div class="feature-grid">
+    <div class="feature-card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+      <h3>Automatic Cleaning</h3>
+      <p>Missing values, duplicates, whitespace, and mixed types are fixed automatically, with a transparent log.</p>
+    </div>
+    <div class="feature-card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 17V9M15 17V5M4 17v-3"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+      <h3>Data Profiling</h3>
+      <p>Shape, types, cardinality, and a quality score computed the moment your file lands.</p>
+    </div>
+    <div class="feature-card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 4 5-8"/></svg>
+      <h3>Instant Dashboards</h3>
+      <p>KPI cards, distributions, correlations, and trends &mdash; auto-selected for your columns.</p>
+    </div>
+    <div class="feature-card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <h3>AI Data Analyst</h3>
+      <p>Ask plain-English questions about your dataset and get grounded, specific answers.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="card-title" style="margin-bottom:14px;">Pinned datasets</div>
+  {% if pinned %}
+    <div class="recent-list">
+      {% for p in pinned %}
+      <a href="/dashboard/{{ p.dataset_id }}" class="recent-item">
+        <span>&#9733; {{ p.filename }}</span>
+        <span class="badge badge-neutral">{{ p.rows }} rows &middot; {{ p.columns }} cols</span>
+      </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card"><p class="empty-note">Pin a dataset from its dashboard to keep it here for quick access.</p></div>
+  {% endif %}
+</section>
+
+<section class="section">
+  <div class="card-title" style="margin-bottom:14px;">Recent analyses</div>
+  {% if recent %}
+    <div class="recent-list">
+      {% for r in recent %}
+      <a href="/dashboard/{{ r.dataset_id }}" class="recent-item">
+        <span>{{ r.filename }}</span>
+        <span class="badge badge-neutral">{{ r.rows }} rows &middot; {{ r.columns }} cols</span>
+      </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card"><p class="empty-note">No datasets analyzed yet. Upload one to get started.</p></div>
+  {% endif %}
+</section>
+
+{% endblock %}
